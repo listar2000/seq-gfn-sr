@@ -49,16 +49,3 @@ class PreOrderEnv(DiscreteEnv):
 
     def log_reward(self, final_states: States) -> TT["batch_shape", torch.float]:
         pass
-
-
-"""
-UIUC - medical/imaging (Bio chair)
-USC - CS (small group, large area, self-motivated)
-RICE - Committee-based (rotation, big group, not hands-on)
-BU - Good Prof (Hardware~, some imaging/optics)
-GATECH - Earthquake/medical
-(Northwestern) - 
-
-RICE > UIUC > USC, BU, GATECH
-RICE > USC > UIUC > BU > GATECH
-"""
