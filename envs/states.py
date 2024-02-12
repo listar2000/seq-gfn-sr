@@ -17,7 +17,7 @@ def make_pre_order_states(env):
         def make_random_states_tensor(
                 cls, batch_shape: Tuple[int, ...]
         ) -> TT["batch_shape", "state_shape", torch.float]:
-            raise NotImplementedError("Currently not supported in pre-order GFN-SR")
+            raise NotImplementedError("Random states not supported in pre-order GFN-SR")
 
         def update_masks(self) -> None:
             """Update the masks based on the current states."""

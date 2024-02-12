@@ -21,8 +21,8 @@ class ActionMeta(ABC):
         self.op_num, self.fn_num = len(self.OPERATORS), len(self.FUNCTIONS)
 
         # include the constant token if needed
-        self.actions_dict = {"c": None} if self.has_constant else {}
-        self.actions_dict.update({
+        self.action_dict = {"c": None} if self.has_constant else {}
+        self.action_dict.update({
             **{f'x{idx + 1}': idx for idx in range(num_features)},  # features
             **self.OPERATORS,  # operators
             **self.FUNCTIONS,  # functions
@@ -42,11 +42,11 @@ class ActionMeta(ABC):
 
     @property
     def action_names(self) -> List[str]:
-        return list(self.actions_dict.keys())
+        return list(self.action_dict.keys())
 
     @property
     def action_fns(self) -> List[Callable]:
-        return list(self.actions_dict.values())
+        return list(self.action_dict.values())
 
     @property
     def action_arities(self) -> List[int]:
