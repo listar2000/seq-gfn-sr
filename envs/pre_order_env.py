@@ -16,23 +16,25 @@ class PreOrderEnv(DiscreteEnv):
         self,
         max_token_length: int,
         action_meta: ActionMeta,
-        placeholder: int = -2,
         device_str: Optional[str] = None,
     ):
-        assert placeholder != -1, "placeholder cannot use the same index as empty token"
-        # state dimension equals 1 + maximum token allowed
-        # the first entry of state tensor is reserved for holding # of tokens to insert next
-        self.state_dim = max_token_length + 1
+        # the first entry of state tensor is reserved for the # token unfilled
+        # the second entry of the state tensor is reserved for the # token need to be filled for valid tree
+        # [# unfilled, # to fill, ...max token length...]
+        self.state_dim = max_token_length + 2
         self.action_meta = action_meta
-        s0 = -torch.ones(self.state_dim, dtype=torch.int8)  # fill in empty token
-        s0[0] = 1
+        s0 = -torch.ones(self.state_dim, dtype=torch.long)  # fill in empty token
+        s0[0], s0[1] = max_token_length, 1
+
+        sf = -torch.ones(self.state_dim, dtype=torch.long)  # sink state should be LongTensor
 
         n_actions = len(self.action_meta.action_dict) + 1  # plus 1 to account for exit action
-        preprocessor = OneHotLSTMPreprocessor()  # TODO: not implemented yet
+        preprocessor = OneHotLSTMPreprocessor(output_dim=0)  # TODO: not implemented yet
 
         super().__init__(
             n_actions=n_actions,
             s0=s0,
+            sf=sf,
             device_str=device_str,
             preprocessor=preprocessor
         )
@@ -41,14 +43,14 @@ class PreOrderEnv(DiscreteEnv):
         # decouple the state generation logic from here
         return make_pre_order_states(self)
 
-    def maskless_step(self, states: States, actions: Actions) -> TT["batch_shape", "state_shape", torch.int8]:
+    def maskless_step(self, states: States, actions: Actions) -> TT["batch_shape", "state_shape", torch.long]:
         pass
 
-    def maskless_backward_step(self, states: States, actions: Actions) -> TT["batch_shape", "state_shape", torch.int8]:
+    def maskless_backward_step(self, states: States, actions: Actions) -> TT["batch_shape", "state_shape", torch.long]:
         pass
 
     def is_action_valid(self, states: States, actions: Actions, backward: bool = False) -> bool:
         pass
 
-    def log_reward(self, final_states: States) -> TT["batch_shape", torch.int8]:
+    def log_reward(self, final_states: States) -> TT["batch_shape", torch.long]:
         pass

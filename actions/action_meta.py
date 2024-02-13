@@ -28,6 +28,21 @@ class ActionMeta(ABC):
             **self.FUNCTIONS,  # functions
         })
 
+        # different types of masks
+        self.fm = torch.ones(len(self.action_dict), dtype=torch.bool)
+        self.fm[self.feat_num:] = False
+
+        self.nbm = torch.ones(len(self.action_dict), dtype=torch.bool)
+        self.nbm[self.feat_num + self.op_num:] = False
+
+    @property
+    def feature_only_mask(self):
+        return self.fm
+
+    @property
+    def no_binary_fn_mask(self):
+        return self.nbm
+
     @property
     def operator_num(self) -> int:
         return self.op_num

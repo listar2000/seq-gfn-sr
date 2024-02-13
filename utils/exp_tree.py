@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import Union
 from torchtyping import TensorType as TT
 
 import torch
@@ -19,15 +19,16 @@ def visualize_tree_graph(graph: Union[TT["state_shape", torch.int8], nx.DiGraph]
     action_names = action_meta.action_names
     pos = graphviz_layout(graph, prog='dot')
     labels = {n: action_names[graph.nodes[n]['value']] for n in graph.nodes}
-    edge_labels = nx.get_edge_attributes(tree_graph, 'label')
+    edge_labels = nx.get_edge_attributes(graph, 'label')
     nx.draw(graph, pos, with_labels=True, arrows=True, labels=labels)
     nx.draw_networkx_edge_labels(graph, pos, edge_labels=edge_labels)
     plt.show()
 
 
-def construct_tree_graph(tensor, action_meta: ActionMeta):
+def construct_tree_graph(tensor: TT["state_shape", torch.int8], action_meta: ActionMeta) -> nx.DiGraph:
     action_arities = action_meta.action_arities
 
+    # first entry of tensor is a placeholder for token remained
     pre_order = tensor[1:].tolist()
     G = nx.DiGraph()
     itx = iter(range(len(pre_order)))
@@ -55,9 +56,7 @@ def construct_tree_graph(tensor, action_meta: ActionMeta):
         elif arity == 1:
             construct_tree_helper(node_id, 'l')
 
-        # Leaf nodes (value 3) are added to the graph without children
-        # except StopIteration:
-        #     return
+        # Leaf nodes don't have children
 
     construct_tree_helper()
 
@@ -88,14 +87,17 @@ def evaluate_tree_graph(graph: nx.DiGraph, action_meta: ActionMeta, data: TT["nu
 
 
 if __name__ == "__main__":
-    action_meta = DefaultActionMeta(num_features=2, has_constant=False)
-    print(action_meta.action_arities)
-    tensor = torch.tensor([0, 8, 0, 1], dtype=torch.int8)
+    def main():
+        action_meta = DefaultActionMeta(num_features=2, has_constant=False)
+        print(action_meta.action_arities)
+        tensor = torch.tensor([0, 8, 0, 1], dtype=torch.int8)
 
-    tree_graph = construct_tree_graph(tensor, action_meta=action_meta)
-    # visualize_tree_graph(tree_graph, action_meta=action_meta)
+        tree_graph = construct_tree_graph(tensor, action_meta=action_meta)
+        # visualize_tree_graph(tree_graph, action_meta=action_meta)
 
-    fake_data = 2 * torch.ones(10, 2)
-    fake_data[:, 1] = torch.arange(10)
-    print(fake_data)
-    print(evaluate_tree_graph(tree_graph, action_meta=action_meta, data=fake_data))
+        fake_data = 2 * torch.ones(10, 2)
+        fake_data[:, 1] = torch.arange(10)
+        print(fake_data)
+        print(evaluate_tree_graph(tree_graph, action_meta=action_meta, data=fake_data))
+
+    main()

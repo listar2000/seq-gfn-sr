@@ -1,16 +1,18 @@
 from typing import ClassVar, Tuple, cast
 
 import torch
+from gfn.env import DiscreteEnv
 from torchtyping import TensorType as TT
 from gfn.states import DiscreteStates
 
 
-def make_pre_order_states(env):
+def make_pre_order_states(env: DiscreteEnv) -> DiscreteStates:
     class PreOrderStates(DiscreteStates):
         state_shape: ClassVar[tuple[int, ...]] = (env.state_dim,)
         s0 = env.s0
         sf = env.sf
         n_actions = env.n_actions
+        action_meta = env.action_meta
         device = env.device
 
         @classmethod
@@ -21,6 +23,8 @@ def make_pre_order_states(env):
 
         def update_masks(self) -> None:
             """Update the masks based on the current states."""
+            # reset forward_masks to all true, backward_masks to all zero
+            self.forward_masks[:], self.backward_masks[:] = True, False
             # The following two lines are for typing only.
             self.forward_masks = cast(
                 TT["batch_shape", "n_actions", torch.bool],
@@ -31,13 +35,38 @@ def make_pre_order_states(env):
                 self.backward_masks,
             )
 
-            # TODO: implement actual logic for forward masking (now there's no mask)
-            self.backward_masks.zero_()
+            remain_space, remain_token = self.tensor[:, 0], self.tensor[:, 1]
+            assert (remain_space >= remain_token).all(), \
+                "# of remaining token should at least be bigger than # of space in tensor state"
 
-            recent_mask = (self.tensor >= 0).long()
-            recent_updated_idx = torch.argmax(recent_mask, dim=1).unsqueeze(1)
+            # Part I: we only mask for states whose construction has not finished yet
+            undone_mask = remain_token > 0
 
-            recent_updated_vals = torch.gather(self.tensor, 1, recent_updated_idx)
-            self.backward_masks[torch.arange(self.batch_shape), recent_updated_vals] = True
+            # those whose construction has finished only have the exit action
+            self.forward_masks[~undone_mask, :-1] = False
+            self.forward_masks[undone_mask, -1] = False
+            undone_forward_masks = self.forward_masks[undone_mask]
+
+            # compare remain_space against remain_token for undone tensor
+            diff_token = remain_space[undone_mask] - remain_token[undone_mask]
+
+            # case 1: if remain_space == remain_token != 0, then we can only fill feature/constant
+            undone_forward_masks[diff_token == 0, :-1] = self.action_meta.feature_only_mask
+
+            # case 2: if remain_space - remain_token == 1, then we can only fill feature/constant/unary op
+            undone_forward_masks[diff_token == 1, :-1] = self.action_meta.no_binary_fn_mask
+
+            # case 3: in other cases, every token is possible
+            self.forward_masks[undone_mask] = undone_forward_masks
+
+            # Part II: backward mask for pre-order env is trivial as the state space is a tree
+            # calculate the indices of the most recently added token
+            recent_idx = (self.state_shape[0] - 1 - remain_space).long()
+
+            # we only consider backward mask for those who has taken at least 1 step
+            non_initial_mask = recent_idx >= 2
+            recent_val = torch.gather(self.tensor[non_initial_mask],
+                                      1, recent_idx[non_initial_mask].unsqueeze(1)).squeeze(1)
+            self.backward_masks[non_initial_mask, recent_val] = True
 
     return PreOrderStates
