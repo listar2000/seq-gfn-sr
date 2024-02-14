@@ -4,6 +4,7 @@ This file contains the different "dictionaries" (metas) of available actions.
 from abc import ABC
 from typing import Dict, Callable, List
 
+from torchtyping import TensorType as TT
 import torch
 
 
@@ -69,6 +70,14 @@ class ActionMeta(ABC):
         A list containing how many arguments (arities) that each action would take
         """
         return self.feat_num * [0] + self.op_num * [1] + self.fn_num * [2]
+
+    def calculate_action_arities(self, action_tensor: TT["batch_size", torch.long])\
+            -> TT["batch_size", "action_space", torch.long]:
+        assert (action_tensor < len(self.action_dict)).all()  # make sure exit action is not involved
+        arity_tensor = torch.zeros_like(action_tensor, dtype=torch.long)
+        arity_tensor[action_tensor >= self.feat_num] += 1  # add one for unary operators
+        arity_tensor[action_tensor >= self.feat_num + self.op_num] += 1  # another add for binary functions
+        return arity_tensor
 
 
 class DummyActionMeta(ActionMeta):

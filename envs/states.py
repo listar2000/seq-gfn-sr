@@ -34,8 +34,7 @@ def make_pre_order_states(env: DiscreteEnv) -> DiscreteStates:
                 TT["batch_shape", "n_actions - 1", torch.bool],
                 self.backward_masks,
             )
-
-            remain_space, remain_token = self.tensor[:, 0], self.tensor[:, 1]
+            remain_space, remain_token = self.tensor[..., 0], self.tensor[..., 1]
             assert (remain_space >= remain_token).all(), \
                 "# of remaining token should at least be bigger than # of space in tensor state"
 
@@ -64,9 +63,11 @@ def make_pre_order_states(env: DiscreteEnv) -> DiscreteStates:
             recent_idx = (self.state_shape[0] - 1 - remain_space).long()
 
             # we only consider backward mask for those who has taken at least 1 step
-            non_initial_mask = recent_idx >= 2
-            recent_val = torch.gather(self.tensor[non_initial_mask],
-                                      1, recent_idx[non_initial_mask].unsqueeze(1)).squeeze(1)
-            self.backward_masks[non_initial_mask, recent_val] = True
+            if (recent_idx >= 2).any():
+                return
+
+            recent_val = torch.gather(self.tensor,
+                                      1, recent_idx.unsqueeze(1)).squeeze(1)
+            self.backward_masks[..., recent_val] = True
 
     return PreOrderStates
