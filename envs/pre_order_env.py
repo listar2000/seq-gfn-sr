@@ -95,5 +95,5 @@ class PreOrderEnv(DiscreteEnv):
     def log_reward(self, final_states: States) -> TT["batch_shape", torch.long]:
         # TODO: implement the actual probabilistic reward (based on MSE/RMSE)
         # currently implementing a uniform reward
-        return torch.log(torch.ones(final_states.tensor.size(0)))
+        return torch.log(torch.ones(final_states.tensor.shape[:-1]))
 

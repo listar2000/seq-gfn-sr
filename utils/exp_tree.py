@@ -8,7 +8,7 @@ from actions.action_meta import ActionMeta, DefaultActionMeta
 
 
 # import matplotlib.pyplot as plt
-def visualize_tree_graph(graph: Union[TT["state_shape", torch.int8], nx.DiGraph], action_meta: ActionMeta):
+def visualize_tree_graph(graph: Union[TT["state_shape", torch.long], nx.DiGraph], action_meta: ActionMeta):
     # requires additional package: matplotlib, pygraphviz
     import matplotlib.pyplot as plt
     from networkx.drawing.nx_agraph import graphviz_layout
@@ -25,7 +25,7 @@ def visualize_tree_graph(graph: Union[TT["state_shape", torch.int8], nx.DiGraph]
     plt.show()
 
 
-def construct_tree_graph(tensor: TT["state_shape", torch.int8], action_meta: ActionMeta) -> nx.DiGraph:
+def construct_tree_graph(tensor: TT["state_shape", torch.long], action_meta: ActionMeta) -> nx.DiGraph:
     action_arities = action_meta.action_arities
 
     # first entry of tensor is a placeholder for token remained
@@ -90,10 +90,10 @@ if __name__ == "__main__":
     def main():
         action_meta = DefaultActionMeta(num_features=2, has_constant=False)
         print(action_meta.action_arities)
-        tensor = torch.tensor([0, 8, 0, 1], dtype=torch.int8)
+        tensor = torch.tensor([0, 8, 0, 1], dtype=torch.long)
 
         tree_graph = construct_tree_graph(tensor, action_meta=action_meta)
-        # visualize_tree_graph(tree_graph, action_meta=action_meta)
+        visualize_tree_graph(tree_graph, action_meta=action_meta)
 
         fake_data = 2 * torch.ones(10, 2)
         fake_data[:, 1] = torch.arange(10)

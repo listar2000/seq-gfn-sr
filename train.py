@@ -14,8 +14,8 @@ if __name__ == "__main__":
 
     # 1 - We define the environment
 
-    action_meta = DummyActionMeta(num_features=1, has_constant=1)
-    env = PreOrderEnv(max_token_length=4, action_meta=action_meta)
+    action_meta = DummyActionMeta(num_features=2, has_constant=1)
+    env = PreOrderEnv(max_token_length=15, action_meta=action_meta)
 
     # 2 - We define the needed modules (neural networks)
 
@@ -36,7 +36,7 @@ if __name__ == "__main__":
 
     # 4 - We define the GFlowNet
 
-    gfn = TBGFlowNet(init_logZ=0., pf=pf_estimator, pb=pb_estimator)  # We initialize logZ to 0
+    gfn = TBGFlowNet(init_logZ=0., pf=pf_estimator, pb=pb_estimator, on_policy=True)  # We initialize logZ to 0
 
     # 5 - We define the sampler and the optimizer
 
@@ -51,12 +51,41 @@ if __name__ == "__main__":
     optimizer.add_param_group({"params": logz_params, "lr": 1e-1})
 
     # 6 - We train the GFlowNet for 1000 iterations, with 16 trajectories per iteration
+    logz_values = []
+    loss_values = []
 
-    for i in (pbar := tqdm(range(1000))):
-        trajectories = sampler.sample_trajectories(env=env, n_trajectories=5)
+    for i in (pbar := tqdm(range(5000))):
+        trajectories = sampler.sample_trajectories(env=env, n_trajectories=16)
         optimizer.zero_grad()
         loss = gfn.loss(env, trajectories)
         loss.backward()
+
+        loss_values.append(loss.item())
+        logz_values.append(gfn.logZ.item())
+
         optimizer.step()
         if i % 25 == 0:
             pbar.set_postfix({"loss": loss.item()})
+
+    plotting = True
+    if plotting:
+        import matplotlib.pyplot as plt
+        # Plotting
+        fig, axs = plt.subplots(2, 1, figsize=(10, 8))
+
+        # Loss vs. Iteration
+        axs[0].plot(loss_values, label='Loss')
+        axs[0].set_xlabel('Iteration')
+        axs[0].set_ylabel('Loss')
+        axs[0].set_title('Loss vs. Iteration')
+        axs[0].legend()
+
+        # logZ vs. Iteration
+        axs[1].plot(logz_values, label='logZ', color='orange')
+        axs[1].set_xlabel('Iteration')
+        axs[1].set_ylabel('logZ')
+        axs[1].set_title('logZ vs. Iteration')
+        axs[1].legend()
+
+        plt.tight_layout()
+        plt.show()
