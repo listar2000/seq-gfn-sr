@@ -1,4 +1,5 @@
 import torch
+from gfn.utils.modules import DiscreteUniform
 from tqdm import tqdm
 
 from gfn.gflownet import TBGFlowNet  # We use a GFlowNet with the Trajectory Balance (TB) loss
@@ -11,11 +12,18 @@ from actions.action_meta import DummyActionMeta
 from envs.pre_order_env import PreOrderEnv
 
 if __name__ == "__main__":
+    # -1 - some hyper-params and arguments
+    USE_DUMMY = False
+    PLOTTING = True
+
+    # 0 - simulate some data
+    X = 2 * torch.rand(20, 2)
+    y = torch.square(X[:, 0]) + X[:, 1]
 
     # 1 - We define the environment
 
-    action_meta = DummyActionMeta(num_features=2, has_constant=1)
-    env = PreOrderEnv(max_token_length=15, action_meta=action_meta)
+    action_meta = DummyActionMeta(num_features=2, has_constant=False)
+    env = PreOrderEnv(max_token_length=4, action_meta=action_meta, reward_eps=0.001, X=X, y=y)
 
     # 2 - We define the needed modules (neural networks)
 
@@ -23,11 +31,16 @@ if __name__ == "__main__":
         input_dim=env.preprocessor.output_dim,
         output_dim=env.n_actions
     )  # Neural network for the forward policy, with as many outputs as there are actions
-    module_PB = NeuralNet(
-        input_dim=env.preprocessor.output_dim,
-        output_dim=env.n_actions - 1,
-        torso=module_PF.torso  # We share all the parameters of P_F and P_B, except for the last layer
-    )
+
+    if USE_DUMMY:
+        # we simply use a non-trainable uniform output, which will be masked out anyway
+        module_PB = DiscreteUniform(output_dim=env.n_actions - 1)
+    else:
+        module_PB = NeuralNet(
+            input_dim=env.preprocessor.output_dim,
+            output_dim=env.n_actions - 1,
+            torso=module_PF.torso  # We share all the parameters of P_F and P_B, except for the last layer
+        )
 
     # 3 - We define the estimators
 
@@ -54,7 +67,7 @@ if __name__ == "__main__":
     logz_values = []
     loss_values = []
 
-    for i in (pbar := tqdm(range(5000))):
+    for i in (pbar := tqdm(range(1000))):
         trajectories = sampler.sample_trajectories(env=env, n_trajectories=16)
         optimizer.zero_grad()
         loss = gfn.loss(env, trajectories)
@@ -67,8 +80,7 @@ if __name__ == "__main__":
         if i % 25 == 0:
             pbar.set_postfix({"loss": loss.item()})
 
-    plotting = True
-    if plotting:
+    if PLOTTING:
         import matplotlib.pyplot as plt
         # Plotting
         fig, axs = plt.subplots(2, 1, figsize=(10, 8))

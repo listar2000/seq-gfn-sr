@@ -29,7 +29,7 @@ def construct_tree_graph(tensor: TT["state_shape", torch.long], action_meta: Act
     action_arities = action_meta.action_arities
 
     # first entry of tensor is a placeholder for token remained
-    pre_order = tensor[1:].tolist()
+    pre_order = tensor[2:].tolist()
     G = nx.DiGraph()
     itx = iter(range(len(pre_order)))
 
@@ -38,7 +38,7 @@ def construct_tree_graph(tensor: TT["state_shape", torch.long], action_meta: Act
         value = pre_order[node_id]
         arity = action_arities[value]
 
-        print(node_id, value, arity)
+        # print(node_id, value, arity)
 
         # Add the node to the graph. If it's the root, no edge_label is needed.
         G.add_node(node_id, value=value)
@@ -63,7 +63,7 @@ def construct_tree_graph(tensor: TT["state_shape", torch.long], action_meta: Act
     return G
 
 
-def evaluate_tree_graph(graph: nx.DiGraph, action_meta: ActionMeta, data: TT["num_data", "num_features"]):
+def evaluate_tree_graph(graph: nx.DiGraph, action_meta: ActionMeta, data: TT["num_samples", "num_features"]):
     assert graph.nodes[0], "Tree graph cannot be empty"
     assert data.shape[1] == action_meta.feat_num, "Mismatch in number of features"
     action_fns = action_meta.action_fns

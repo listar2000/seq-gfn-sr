@@ -10,6 +10,7 @@ from torchtyping import TensorType as TT
 from actions.action_meta import ActionMeta
 # from envs.preprocess import OneHotLSTMPreprocessor
 from envs.states import make_pre_order_states
+from utils.exp_tree import construct_tree_graph, evaluate_tree_graph
 
 
 class PreOrderEnv(DiscreteEnv):
@@ -17,8 +18,11 @@ class PreOrderEnv(DiscreteEnv):
             self,
             max_token_length: int,
             action_meta: ActionMeta,
+            X: TT["num_samples", "num_features", torch.float],
+            y: TT["num_samples", torch.float],
             placeholder: int = -1,
-            device_str: Optional[str] = "cpu",
+            reward_eps: float = 1,
+            device_str: Optional[str] = "cpu"
     ):
         assert placeholder < 0, "placeholder must be negative"
         self.placeholder = placeholder
@@ -27,6 +31,10 @@ class PreOrderEnv(DiscreteEnv):
         # [# unfilled, # to fill, ...max token length...]
         self.state_dim = max_token_length + 2
         self.action_meta = action_meta
+
+        assert X.size(1) >= (action_meta.feat_num - 1 if self.action_meta.has_constant else action_meta.feat_num)
+        self.X, self.y = X, y
+        self.reward_eps = reward_eps
 
         device = torch.device(device_str)
         s0 = self.placeholder * torch.ones(self.state_dim, dtype=torch.long, device=device)  # fill in empty token
@@ -58,7 +66,7 @@ class PreOrderEnv(DiscreteEnv):
         2. Apply the actions to these states (insert to first vacant space in state tensor)
         3. Update the # of remaining spaces and # of remaining tokens, based on action arities
         """
-        assert len(states.tensor.shape) <= 2
+        assert states.tensor.dim() <= 2
         action_tensor = actions.tensor
         state_tensor = states.tensor
         undone_mask = state_tensor[:, 1] > 0
@@ -81,7 +89,7 @@ class PreOrderEnv(DiscreteEnv):
         return new_state_tensor
 
     def maskless_backward_step(self, states: States, actions: Actions) -> TT["batch_shape", "state_shape", torch.long]:
-        assert len(states.tensor.shape) <= 2
+        assert states.tensor.dim() <= 2
         # make sure no state is in initial state
         action_tensor, state_tensor = actions.tensor, states.tensor
         assert not torch.eq(state_tensor, self.s0).all(dim=-1).any(), "State tensor cannot be initial state"
@@ -93,7 +101,17 @@ class PreOrderEnv(DiscreteEnv):
         return new_state_tensor
 
     def log_reward(self, final_states: States) -> TT["batch_shape", torch.long]:
-        # TODO: implement the actual probabilistic reward (based on MSE/RMSE)
-        # currently implementing a uniform reward
-        return torch.log(torch.ones(final_states.tensor.shape[:-1]))
-
+        tensor = final_states.tensor
+        assert tensor.dim() == 2
+        log_rewards = torch.zeros(tensor.size(0))
+        for i in range(tensor.size(0)):
+            # turn each state into a nx.DiGraph object
+            tree_graph = construct_tree_graph(tensor[i], self.action_meta)
+            try:
+                evals = evaluate_tree_graph(tree_graph, action_meta=self.action_meta, data=self.X)
+                rmse = torch.mean(torch.sqrt((evals - self.y) ** 2))
+                reward = 1 / (self.reward_eps + rmse)
+                log_rewards[i] = torch.log(reward)
+            except RuntimeError:
+                log_rewards[i] = -5  # around 1e-5 for reward
+        return log_rewards
