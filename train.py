@@ -23,7 +23,7 @@ if __name__ == "__main__":
     # 1 - We define the environment
 
     action_meta = DummyActionMeta(num_features=2, has_constant=False)
-    env = PreOrderEnv(max_token_length=4, action_meta=action_meta, reward_eps=0.001, X=X, y=y)
+    env = PreOrderEnv(max_token_length=4, action_meta=action_meta, reward_eps=1, X=X, y=y)
 
     # 2 - We define the needed modules (neural networks)
 
@@ -66,8 +66,10 @@ if __name__ == "__main__":
     # 6 - We train the GFlowNet for 1000 iterations, with 16 trajectories per iteration
     logz_values = []
     loss_values = []
+    reward_values = []
+    eval_iters = []
 
-    for i in (pbar := tqdm(range(1000))):
+    for i in (pbar := tqdm(range(5000))):
         trajectories = sampler.sample_trajectories(env=env, n_trajectories=16)
         optimizer.zero_grad()
         loss = gfn.loss(env, trajectories)
@@ -77,7 +79,15 @@ if __name__ == "__main__":
         logz_values.append(gfn.logZ.item())
 
         optimizer.step()
-        if i % 25 == 0:
+        if i % 50 == 0:
+            with torch.no_grad():
+                # measure rewards
+                eval_iters.append(int(i))
+                trajectories = sampler.sample_trajectories(env=env, n_trajectories=100)
+                final_states = trajectories.last_states
+                log_rewards = env.log_reward(final_states)
+                reward_values.append(log_rewards.mean().item())
+
             pbar.set_postfix({"loss": loss.item()})
 
     if PLOTTING:
@@ -92,11 +102,16 @@ if __name__ == "__main__":
         axs[0].set_title('Loss vs. Iteration')
         axs[0].legend()
 
-        # logZ vs. Iteration
-        axs[1].plot(logz_values, label='logZ', color='orange')
+        # logZ vs. Iteration or reward vs. Iteration
+        # axs[1].plot(logz_values, label='logZ', color='orange')
+        # axs[1].set_xlabel('Iteration')
+        # axs[1].set_ylabel('logZ')
+        # axs[1].set_title('logZ vs. Iteration')
+        # axs[1].legend()
+        axs[1].plot(eval_iters, reward_values, label='log rewards', color='orange')
         axs[1].set_xlabel('Iteration')
-        axs[1].set_ylabel('logZ')
-        axs[1].set_title('logZ vs. Iteration')
+        axs[1].set_ylabel('log rewards')
+        axs[1].set_title('Rewards with eps = 1')
         axs[1].legend()
 
         plt.tight_layout()
