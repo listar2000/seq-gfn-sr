@@ -35,6 +35,7 @@ class PreOrderEnv(DiscreteEnv):
         assert X.size(1) >= (action_meta.feat_num - 1 if self.action_meta.has_constant else action_meta.feat_num)
         self.X, self.y = X, y
         self.reward_eps = reward_eps
+        self.max_mse = None
 
         device = torch.device(device_str)
         s0 = self.placeholder * torch.ones(self.state_dim, dtype=torch.long, device=device)  # fill in empty token
@@ -100,6 +101,16 @@ class PreOrderEnv(DiscreteEnv):
         new_state_tensor = state_tensor.scatter(-1, recent_idx.unsqueeze(1), self.placeholder)
         return new_state_tensor
 
+    def _constrained_reward(self, evals: TT["num_samples", torch.long]):
+        """
+        The vanilla, non-probabilistic reward function implemented in original GFN-SR paper
+        """
+        loss = ((self.y - evals) ** 2).mean()
+        if not self.max_mse:
+            self.max_mse = ((self.y - self.y.mean()) ** 2).mean()
+
+        return torch.clamp(1.0 - loss / self.max_mse, min=1e-8)
+
     def log_reward(self, final_states: States) -> TT["batch_shape", torch.long]:
         tensor = final_states.tensor
         assert tensor.dim() == 2
@@ -109,9 +120,12 @@ class PreOrderEnv(DiscreteEnv):
             tree_graph = construct_tree_graph(tensor[i], self.action_meta)
             try:
                 evals = evaluate_tree_graph(tree_graph, action_meta=self.action_meta, data=self.X)
-                rmse = torch.mean(torch.sqrt((evals - self.y) ** 2))
-                reward = 1 / (self.reward_eps + rmse)
+                # rmse = torch.mean(torch.sqrt((evals - self.y) ** 2))
+                # reward = 1 / (self.reward_eps + rmse)
+                reward = self._constrained_reward(evals)
                 log_rewards[i] = torch.log(reward)
             except RuntimeError:
-                log_rewards[i] = -5  # around 1e-5 for reward
+                log_rewards[i] = torch.log(torch.tensor(1e-8))
+
+        log_rewards[~torch.isfinite(log_rewards)] = torch.log(torch.tensor(1e-8))
         return log_rewards

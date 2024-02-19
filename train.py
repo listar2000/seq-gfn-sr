@@ -18,12 +18,12 @@ if __name__ == "__main__":
 
     # 0 - simulate some data
     X = 2 * torch.rand(20, 2)
-    y = torch.square(X[:, 0]) + X[:, 1]
+    y = torch.sin(X[:, 0]) + torch.cos(X[:, 1])
 
     # 1 - We define the environment
 
     action_meta = DummyActionMeta(num_features=2, has_constant=False)
-    env = PreOrderEnv(max_token_length=4, action_meta=action_meta, reward_eps=1, X=X, y=y)
+    env = PreOrderEnv(max_token_length=7, action_meta=action_meta, reward_eps=0.001, X=X, y=y)
 
     # 2 - We define the needed modules (neural networks)
 
@@ -70,7 +70,10 @@ if __name__ == "__main__":
     eval_iters = []
 
     for i in (pbar := tqdm(range(5000))):
-        trajectories = sampler.sample_trajectories(env=env, n_trajectories=16)
+        trajectories = sampler.sample_trajectories(env=env, n_trajectories=32)
+
+        print(trajectories.last_states.tensor)
+        assert False
         optimizer.zero_grad()
         loss = gfn.loss(env, trajectories)
         loss.backward()
@@ -111,7 +114,7 @@ if __name__ == "__main__":
         axs[1].plot(eval_iters, reward_values, label='log rewards', color='orange')
         axs[1].set_xlabel('Iteration')
         axs[1].set_ylabel('log rewards')
-        axs[1].set_title('Rewards with eps = 1')
+        axs[1].set_title('Rewards with eps = 1e-3')
         axs[1].legend()
 
         plt.tight_layout()
