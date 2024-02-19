@@ -1,0 +1,23 @@
+{
+  "use_dummy": false,
+  "plotting": true,
+  "data": "data.npz",
+  "env": {
+    "max_token_length": 7,
+    "num_features": 2,
+    "has_constant": false,
+    "reward_eps": 0.001
+  },
+  "gfn": "tb",
+  "training": {
+    "iterations": 10000,
+    "n_traj": 16,
+    "eval_traj": 128,
+    "eval_interval": 100,
+    "eval_metric": "reward",
+    "optimizer": {
+      "lr": 0.001,
+      "logz_lr": 0.1
+    }
+  }
+}

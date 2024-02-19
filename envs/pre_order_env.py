@@ -22,6 +22,7 @@ class PreOrderEnv(DiscreteEnv):
             y: TT["num_samples", torch.float],
             placeholder: int = -1,
             reward_eps: float = 1,
+            metric: str = "mse",
             device_str: Optional[str] = "cpu"
     ):
         assert placeholder < 0, "placeholder must be negative"
@@ -35,6 +36,7 @@ class PreOrderEnv(DiscreteEnv):
         assert X.size(1) >= (action_meta.feat_num - 1 if self.action_meta.has_constant else action_meta.feat_num)
         self.X, self.y = X, y
         self.reward_eps = reward_eps
+        self.metric = metric
         self.max_mse = None
 
         device = torch.device(device_str)
@@ -101,31 +103,38 @@ class PreOrderEnv(DiscreteEnv):
         new_state_tensor = state_tensor.scatter(-1, recent_idx.unsqueeze(1), self.placeholder)
         return new_state_tensor
 
-    def _constrained_reward(self, evals: TT["num_samples", torch.long]):
+    def _constrained_mse_reward(self, loss: TT["batch_shape", torch.long]):
         """
         The vanilla, non-probabilistic reward function implemented in original GFN-SR paper
         """
-        loss = ((self.y - evals) ** 2).mean()
         if not self.max_mse:
             self.max_mse = ((self.y - self.y.mean()) ** 2).mean()
+        return torch.clamp(1.0 - loss / self.max_mse, min=1e-12)
 
-        return torch.clamp(1.0 - loss / self.max_mse, min=1e-8)
-
-    def log_reward(self, final_states: States) -> TT["batch_shape", torch.long]:
+    def _evaluate_final_states(self, final_states: States, metric="mse") -> TT["batch_shape", torch.long]:
         tensor = final_states.tensor
         assert tensor.dim() == 2
-        log_rewards = torch.zeros(tensor.size(0))
+        loss = torch.zeros(tensor.size(0))
         for i in range(tensor.size(0)):
-            # turn each state into a nx.DiGraph object
             tree_graph = construct_tree_graph(tensor[i], self.action_meta)
             try:
                 evals = evaluate_tree_graph(tree_graph, action_meta=self.action_meta, data=self.X)
-                # rmse = torch.mean(torch.sqrt((evals - self.y) ** 2))
-                # reward = 1 / (self.reward_eps + rmse)
-                reward = self._constrained_reward(evals)
-                log_rewards[i] = torch.log(reward)
-            except RuntimeError:
-                log_rewards[i] = torch.log(torch.tensor(1e-8))
+                if metric == 'mse':
+                    loss[i] = ((self.y - evals) ** 2).mean()
+                elif metric == 'rmse':
+                    loss[i] = torch.sqrt(((self.y - evals) ** 2).mean())
+                elif metric == 'nrmse':
+                    loss[i] = torch.sqrt(((self.y - evals) ** 2).mean() / torch.var(self.y))
+                elif metric == 'mae':
+                    loss[i] = torch.abs(self.y - evals).mean()
+                else:
+                    raise NotImplementedError(f"{metric} is not a supported metric")
+            except ValueError:
+                loss[i] = torch.inf
+        return loss
 
-        log_rewards[~torch.isfinite(log_rewards)] = torch.log(torch.tensor(1e-8))
+    def log_reward(self, final_states: States) -> TT["batch_shape", torch.long]:
+        loss = self._evaluate_final_states(final_states, metric=self.metric)
+        log_rewards = torch.log(self._constrained_mse_reward(loss))
+        log_rewards[~torch.isfinite(log_rewards)] = torch.log(torch.tensor(1e-12))
         return log_rewards
